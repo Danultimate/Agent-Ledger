@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-06-08
+
 ### Added — v2 cryptographic delegation proof
 - **Signed receipts** (Ed25519): `Receipt.sign(private_key)` signs the frozen
   `agentledger.receipt.v1` canonical bytes; `agentledger.signing` provides
@@ -74,5 +76,6 @@ Initial release. Action-time proof and delegation verification for MCP agents.
   digests are tamper-evidence, not confidentiality — treat proof logs as
   sensitive.
 
-[Unreleased]: https://github.com/Danultimate/Agent-Ledger/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Danultimate/Agent-Ledger/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Danultimate/Agent-Ledger/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Danultimate/Agent-Ledger/releases/tag/v0.1.0
