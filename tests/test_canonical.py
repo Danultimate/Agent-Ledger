@@ -8,7 +8,7 @@ version tag (agentledger.receipt.v2 / agentledger.chain.v2), not an edit to v1.
 
 from datetime import datetime, timezone
 
-from agentledger.canonical import canonical_bytes, canonical_json
+from agentledger.canonical import canonical_json
 from agentledger.chain import CHAIN_PAYLOAD_VERSION
 from agentledger.receipt import RECEIPT_PAYLOAD_VERSION, Receipt
 
