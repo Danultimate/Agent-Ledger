@@ -1,5 +1,10 @@
 # AgentLedger
 
+[![CI](https://github.com/Danultimate/Agent-Ledger/actions/workflows/ci.yml/badge.svg)](https://github.com/Danultimate/Agent-Ledger/actions/workflows/ci.yml)
+[![PyPI version](https://img.shields.io/pypi/v/agentledger-llm.svg)](https://pypi.org/project/agentledger-llm/)
+[![Python versions](https://img.shields.io/pypi/pyversions/agentledger-llm.svg)](https://pypi.org/project/agentledger-llm/)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+
 > Your agent executed a tool. AgentLedger **records** — tamper-evidently — which
 > action ran, on whose authority, and whether it stayed within the delegation it
 > was given.
@@ -151,6 +156,12 @@ verified agent identity. Input/output digests are **tamper-evidence**, not
 confidentiality — low-entropy inputs can be recovered by guessing, so treat
 proof logs as sensitive. For cryptographic identity binding you need
 SPIFFE/SPIRE + AgentLedger v2. See [docs/wimse-alignment.md](docs/wimse-alignment.md).
+
+---
+
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ---
 
