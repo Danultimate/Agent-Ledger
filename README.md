@@ -70,6 +70,51 @@ async def delete_alert(params, context=None):
 
 ---
 
+## Cryptographic delegation (v2)
+
+v1 records that an action *matched* a receipt. **v2 adds cryptographic proof
+that the grant was real** — the principal signs the receipt (Ed25519), and the
+verifier checks it against a trusted key. A `within_delegation = True` verdict on
+a signed receipt means *the named agent acted under a grant the principal
+actually signed* — not just that the strings matched.
+
+```bash
+pip install "agentledger-llm[crypto]"
+```
+
+```python
+from agentledger import Ledger, InMemoryKeyProvider
+from agentledger.signing import generate_keypair
+
+# Principal holds the private key and signs the grant
+priv, pub = generate_keypair()
+receipt = ledger.issue_receipt(principal="user:d", agent="agent:a",
+                               permitted_tools=["get_rates"],
+                               permitted_scopes=["read:rates"])
+receipt.sign(priv)
+
+# Verifier trusts only public keys it already holds (never one in the receipt)
+ledger = Ledger(key_provider=InMemoryKeyProvider({"user:d": pub}))
+
+@ledger.record(receipt=receipt, require_signed=True, scopes=["read:rates"])
+async def get_rates(params, context=None):
+    return {"GBP": 0.79}
+```
+
+- **Default is graceful:** unsigned (v1-style) receipts still work — recorded
+  with `signature_verified=None`, never reported as verified. `require_signed=True`
+  makes unsigned/unverifiable a violation.
+- **Scopes:** `scopes=[...]` checks each against the receipt's `permitted_scopes`.
+- **Agent identity (optional):** pass an `IdentityProvider` (e.g.
+  `SpiffeIdentityProvider`) to bind the workload to the receipt's agent;
+  without one, the verdict records `identity_status="unverified"`.
+
+What v2 does and does not defend against is enumerated in
+[docs/threat-model.md](docs/threat-model.md); the design is in
+[docs/v2-design.md](docs/v2-design.md).
+
+---
+
 ## The three-layer model
 
 AgentLedger sits *after* authentication, not instead of it:
@@ -102,9 +147,13 @@ AgentLedger v1 explicitly does not:
 - **Enforce** authorization by default (it records; opt in with `on_violation="raise"`)
 - Provide mid-chain revocation *(v3 — see [roadmap](docs/roadmap.md))*
 - Handle multi-hop delegation chains *(v3)*
-- Bind agent identity cryptographically *(v2 — SPIFFE/SPIRE + signed receipts)*
 - Provide enterprise compliance (SOC 2, legal)
 - Compete with Prefactor (enterprise) or KYA-OS (DID-based)
+
+As of v2, signed receipts + a pluggable identity provider **do** add
+cryptographic delegation proof and agent-identity binding — within the limits
+set out in [docs/threat-model.md](docs/threat-model.md) (a compromised signing
+key, a malicious principal, and an in-process verifier remain out of scope).
 
 See **[docs/roadmap.md](docs/roadmap.md)** for v2/v3 scope and entry criteria.
 

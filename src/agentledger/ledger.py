@@ -12,6 +12,8 @@ from functools import wraps
 from typing import Any, Callable, Optional
 
 from agentledger.chain import HashChain
+from agentledger.identity import MISMATCH, UNVERIFIED, IdentityProvider
+from agentledger.keys import KeyProvider
 from agentledger.proof import ActionProof, ScopeViolation
 from agentledger.receipt import Receipt
 from agentledger.storage.jsonl_store import JSONLStore
@@ -66,6 +68,8 @@ class Ledger:
         self,
         proof_log: str = "./logs/agent-proofs.jsonl",
         auto_integrate_traceforge: bool = True,
+        key_provider: Optional[KeyProvider] = None,
+        identity_provider: Optional[IdentityProvider] = None,
     ):
         self._store = JSONLStore(proof_log)
         self._chain = HashChain()
@@ -75,6 +79,9 @@ class Ledger:
         self._verifier = Verifier()
         self._last_proof: Optional[ActionProof] = None
         self._auto_traceforge = auto_integrate_traceforge
+        # v2: trusted-key resolution and optional agent identity binding.
+        self._key_provider = key_provider
+        self._identity_provider = identity_provider
 
     # ------------------------------------------------------------------ #
     # Receipts
@@ -113,6 +120,8 @@ class Ledger:
         receipt: Optional[Receipt] = None,
         tool_name: Optional[str] = None,
         on_violation: str = "record",
+        require_signed: bool = False,
+        scopes: Optional[list[str]] = None,
     ):
         """Decorator for MCP tool handlers. Records an action proof per call.
 
@@ -128,9 +137,17 @@ class Ledger:
         * ``"warn"``  — record, emit a ``UserWarning``, and continue.
         * ``"raise"`` — record, then raise :class:`DelegationViolation`.
 
+        v2 options:
+
+        * ``require_signed`` — when True, an unsigned or unverifiable receipt is
+          a violation. Default False (graceful): unsigned receipts are recorded
+          with ``signature_verified=None`` and never reported as verified.
+        * ``scopes`` — scopes this call requires; each is checked against the
+          receipt's ``permitted_scopes`` (records ``scope_not_permitted``).
+
         Usage::
 
-            @ledger.record(receipt=my_receipt)
+            @ledger.record(receipt=my_receipt, require_signed=True, scopes=["read:rates"])
             async def my_tool(params, context=None):
                 ...
         """
@@ -148,7 +165,8 @@ class Ledger:
                 @wraps(func)
                 async def async_wrapper(*args, **kwargs):
                     return await self._record_async(
-                        func, actual_tool_name, receipt, on_violation, args, kwargs
+                        func, actual_tool_name, receipt, on_violation,
+                        require_signed, scopes, args, kwargs,
                     )
 
                 return async_wrapper
@@ -156,7 +174,8 @@ class Ledger:
             @wraps(func)
             def sync_wrapper(*args, **kwargs):
                 return self._record_sync(
-                    func, actual_tool_name, receipt, on_violation, args, kwargs
+                    func, actual_tool_name, receipt, on_violation,
+                    require_signed, scopes, args, kwargs,
                 )
 
             return sync_wrapper
@@ -166,8 +185,11 @@ class Ledger:
     # ------------------------------------------------------------------ #
     # Recording (sync + async share prep/finalize)
     # ------------------------------------------------------------------ #
-    def _record_sync(self, func, tool_name, receipt, on_violation, args, kwargs):
-        input_hash, within, violations = self._prepare(receipt, tool_name, args, kwargs)
+    def _record_sync(
+        self, func, tool_name, receipt, on_violation, require_signed, scopes,
+        args, kwargs,
+    ):
+        ctx = self._prepare(receipt, tool_name, require_signed, scopes, args, kwargs)
         start = time.time()
         error = None
         result = None
@@ -177,15 +199,15 @@ class Ledger:
             error = str(e)
             raise
         finally:
-            self._finalize(
-                tool_name, receipt, input_hash, within, violations,
-                result, error, start,
-            )
+            self._finalize(tool_name, receipt, ctx, result, error, start)
         self._maybe_signal(on_violation)
         return result
 
-    async def _record_async(self, func, tool_name, receipt, on_violation, args, kwargs):
-        input_hash, within, violations = self._prepare(receipt, tool_name, args, kwargs)
+    async def _record_async(
+        self, func, tool_name, receipt, on_violation, require_signed, scopes,
+        args, kwargs,
+    ):
+        ctx = self._prepare(receipt, tool_name, require_signed, scopes, args, kwargs)
         start = time.time()
         error = None
         result = None
@@ -195,26 +217,37 @@ class Ledger:
             error = str(e)
             raise
         finally:
-            self._finalize(
-                tool_name, receipt, input_hash, within, violations,
-                result, error, start,
-            )
+            self._finalize(tool_name, receipt, ctx, result, error, start)
         self._maybe_signal(on_violation)
         return result
 
-    def _prepare(self, receipt, tool_name, args, kwargs):
+    def _prepare(self, receipt, tool_name, require_signed, scopes, args, kwargs):
         tool_input = args[0] if args else kwargs.get("params", kwargs)
         input_hash = self._hash(tool_input)
-        within_delegation = None
-        violations: list[ScopeViolation] = []
-        if receipt:
-            within_delegation, violations = self._check_receipt(receipt, tool_name)
-        return input_hash, within_delegation, violations
+        # The handler context (where a presented identity credential lives).
+        context = kwargs.get("context")
+        if context is None and len(args) > 1:
+            context = args[1]
 
-    def _finalize(
-        self, tool_name, receipt, input_hash, within, violations,
-        result, error, start,
-    ):
+        within = None
+        violations: list[ScopeViolation] = []
+        signature_verified = None
+        identity_status = None
+        if receipt:
+            within, violations, signature_verified, identity_status = (
+                self._verify_receipt(
+                    receipt, tool_name, require_signed, scopes, context
+                )
+            )
+        return {
+            "input_hash": input_hash,
+            "within": within,
+            "violations": violations,
+            "signature_verified": signature_verified,
+            "identity_status": identity_status,
+        }
+
+    def _finalize(self, tool_name, receipt, ctx, result, error, start):
         latency_ms = int((time.time() - start) * 1000)
         output_hash = self._hash(result) if result is not None else None
 
@@ -223,10 +256,12 @@ class Ledger:
             principal=receipt.principal if receipt else None,
             agent=receipt.agent if receipt else None,
             tool_name=tool_name,
-            tool_input_hash=input_hash,
+            tool_input_hash=ctx["input_hash"],
             tool_output_hash=output_hash,
-            within_delegation=within,
-            violations=violations,
+            within_delegation=ctx["within"],
+            signature_verified=ctx["signature_verified"],
+            identity_status=ctx["identity_status"],
+            violations=ctx["violations"],
             latency_ms=latency_ms,
             error=self._truncate_error(error),
             previous_proof_hash=self._chain.head,
@@ -253,10 +288,14 @@ class Ledger:
         elif on_violation == "raise":
             raise DelegationViolation(proof)
 
-    def _check_receipt(
-        self, receipt: Receipt, tool_name: str
-    ) -> tuple[bool, list[ScopeViolation]]:
+    def _verify_receipt(
+        self, receipt: Receipt, tool_name: str, require_signed: bool,
+        scopes: Optional[list[str]], context,
+    ) -> tuple[bool, list[ScopeViolation], Optional[bool], Optional[str]]:
         violations: list[ScopeViolation] = []
+
+        signature_verified = self._check_signature(receipt, require_signed, violations)
+        identity_status = self._check_identity(receipt, context, violations)
 
         if receipt.is_expired:
             violations.append(
@@ -288,7 +327,116 @@ class Ledger:
                 )
             )
 
-        return (len(violations) == 0, violations)
+        for scope in scopes or []:
+            if not receipt.permits_scope(scope):
+                violations.append(
+                    ScopeViolation(
+                        violation_type="scope_not_permitted",
+                        tool_called=tool_name,
+                        scope_required=scope,
+                        receipt_id=receipt.receipt_id,
+                        explanation=(
+                            f"Call required scope '{scope}' but delegation only "
+                            f"permits: {receipt.permitted_scopes}"
+                        ),
+                        remediation=(
+                            f"Re-issue receipt with '{scope}' in permitted_scopes."
+                        ),
+                    )
+                )
+
+        return (len(violations) == 0, violations, signature_verified, identity_status)
+
+    def _check_signature(
+        self, receipt: Receipt, require_signed: bool, violations: list[ScopeViolation]
+    ) -> Optional[bool]:
+        """Verify the receipt signature against a trusted key. See v2-design.md."""
+        if not receipt.is_signed:
+            if require_signed:
+                violations.append(
+                    ScopeViolation(
+                        violation_type="signature_missing",
+                        receipt_id=receipt.receipt_id,
+                        explanation=(
+                            f"require_signed is set but receipt {receipt.receipt_id} "
+                            f"is unsigned."
+                        ),
+                        remediation="Sign the receipt: receipt.sign(principal_private_key).",
+                    )
+                )
+                return False
+            return None  # graceful: recorded but not cryptographically verified
+
+        pub = (
+            self._key_provider.public_key_for(receipt.principal)
+            if self._key_provider
+            else None
+        )
+        if pub is None:
+            if require_signed:
+                violations.append(
+                    ScopeViolation(
+                        violation_type="signature_unverifiable",
+                        receipt_id=receipt.receipt_id,
+                        explanation=(
+                            f"Receipt {receipt.receipt_id} is signed but no trusted "
+                            f"public key is configured for principal "
+                            f"'{receipt.principal}'."
+                        ),
+                        remediation=(
+                            "Register the principal's public key via a KeyProvider, "
+                            "e.g. InMemoryKeyProvider({principal: public_key})."
+                        ),
+                    )
+                )
+            return None
+
+        from agentledger.signing import verify as verify_signature
+
+        ok = verify_signature(
+            receipt.canonical_bytes(), receipt.signature, pub, receipt.signature_alg
+        )
+        if not ok:
+            violations.append(
+                ScopeViolation(
+                    violation_type="signature_invalid",
+                    receipt_id=receipt.receipt_id,
+                    explanation=(
+                        f"Receipt {receipt.receipt_id} signature did not verify "
+                        f"against the trusted key for '{receipt.principal}' "
+                        f"(alg={receipt.signature_alg})."
+                    ),
+                    remediation=(
+                        "Re-issue and re-sign the receipt with the principal's "
+                        "current key; ensure the trusted key matches."
+                    ),
+                )
+            )
+        return ok
+
+    def _check_identity(
+        self, receipt: Receipt, context, violations: list[ScopeViolation]
+    ) -> Optional[str]:
+        """Bind the presenting workload to the receipt's agent (threat T3)."""
+        if self._identity_provider is None:
+            return UNVERIFIED  # residual R4: no provider configured
+        status = self._identity_provider.check(receipt.agent, context)
+        if status == MISMATCH:
+            violations.append(
+                ScopeViolation(
+                    violation_type="identity_mismatch",
+                    receipt_id=receipt.receipt_id,
+                    explanation=(
+                        f"Presented identity does not match the receipt's agent "
+                        f"'{receipt.agent}'."
+                    ),
+                    remediation=(
+                        "Ensure the workload presents the SVID/identity that "
+                        "matches the receipt's agent, or correct the receipt."
+                    ),
+                )
+            )
+        return status
 
     # ------------------------------------------------------------------ #
     # Verification & reporting

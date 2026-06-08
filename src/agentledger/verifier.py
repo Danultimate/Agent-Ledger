@@ -39,10 +39,24 @@ class Verdict:
         self.principal = proof.principal
         self.agent = proof.agent
         self.within_delegation = proof.within_delegation
+        self.signature_verified = proof.signature_verified
+        self.identity_status = proof.identity_status
         self.violations = proof.violations
         self.executed_at = proof.executed_at
         self.passed = proof.passed
         self.explanation = self._build_explanation(proof)
+
+    @staticmethod
+    def _crypto_note(proof: ActionProof) -> str:
+        """Honest one-line summary of the cryptographic basis (v2)."""
+        if proof.signature_verified is True:
+            sig = "signature verified"
+        elif proof.signature_verified is False:
+            sig = "signature INVALID/missing"
+        else:
+            sig = "unsigned — not cryptographically verified"
+        ident = proof.identity_status or "not checked"
+        return f"[{sig}; identity: {ident}]"
 
     def _build_explanation(self, proof: ActionProof) -> str:
         if proof.within_delegation is None:
@@ -51,30 +65,38 @@ class Verdict:
                 f"No delegation receipt provided — action recorded but not "
                 f"checked against intent."
             )
+        note = self._crypto_note(proof)
         if proof.within_delegation:
             return (
                 f"Agent '{proof.agent}' called '{proof.tool_name}' "
                 f"on behalf of '{proof.principal}' at {proof.executed_at.isoformat()}. "
-                f"Action was within delegation."
+                f"Action was within delegation. {note}"
             )
         violation_summary = "; ".join(v.explanation for v in proof.violations)
         return (
             f"Agent '{proof.agent}' called '{proof.tool_name}' "
             f"on behalf of '{proof.principal}' at {proof.executed_at.isoformat()}. "
-            f"VIOLATIONS RECORDED: {violation_summary}"
+            f"VIOLATIONS RECORDED: {violation_summary} {note}"
         )
 
     def print(self) -> None:
         color = "green" if self.passed else "red"
         status = "WITHIN DELEGATION" if self.passed else "VIOLATION RECORDED"
         console.print()
+        if self.signature_verified is True:
+            sig = "[green]verified[/green]"
+        elif self.signature_verified is False:
+            sig = "[red]invalid/missing[/red]"
+        else:
+            sig = "[yellow]unsigned[/yellow]"
         console.print(
             Panel.fit(
                 f"[bold]{status}[/bold]\n"
                 f"Proof:  [dim]{self.proof_id}[/dim]\n"
                 f"Tool:   {self.tool_name}\n"
                 f"Agent:  {self.agent or 'unknown'}\n"
-                f"For:    {self.principal or 'unknown'}\n\n"
+                f"For:    {self.principal or 'unknown'}\n"
+                f"Signed: {sig}   Identity: {self.identity_status or 'not checked'}\n\n"
                 f"{self.explanation}",
                 border_style=color,
             )

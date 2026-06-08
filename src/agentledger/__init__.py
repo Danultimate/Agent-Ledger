@@ -20,8 +20,14 @@ from agentledger.ledger import Ledger, DelegationViolation
 from agentledger.receipt import Receipt
 from agentledger.proof import ActionProof, ScopeViolation
 from agentledger.verifier import Verifier, Verdict
+from agentledger.keys import KeyProvider, InMemoryKeyProvider
+from agentledger.identity import (
+    IdentityProvider,
+    StaticIdentityProvider,
+    SpiffeIdentityProvider,
+)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "Ledger",
@@ -31,5 +37,10 @@ __all__ = [
     "ScopeViolation",
     "Verifier",
     "Verdict",
+    "KeyProvider",
+    "InMemoryKeyProvider",
+    "IdentityProvider",
+    "StaticIdentityProvider",
+    "SpiffeIdentityProvider",
     "__version__",
 ]

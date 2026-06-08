@@ -28,7 +28,10 @@ def _utcnow() -> datetime:
 
 
 class ScopeViolation(BaseModel):
-    violation_type: str   # "tool_not_permitted" | "scope_not_permitted" | "receipt_expired"
+    # v1: "tool_not_permitted" | "scope_not_permitted" | "receipt_expired"
+    # v2: + "signature_missing" | "signature_invalid" | "signature_unverifiable"
+    #       | "identity_mismatch"
+    violation_type: str
     tool_called: Optional[str] = None
     scope_required: Optional[str] = None
     receipt_id: Optional[str] = None
@@ -45,6 +48,13 @@ class ActionProof(BaseModel):
     tool_input_hash: str       # SHA256 digest of input — not raw input
     tool_output_hash: Optional[str] = None
     within_delegation: Optional[bool] = None  # None if no receipt provided
+    # v2 crypto status, recorded independently so within_delegation=True is never
+    # mistaken for "cryptographically verified":
+    #   signature_verified: None = unsigned/unverifiable, True/False = checked
+    #   identity_status:    None = no receipt / no provider, else
+    #                       "verified" | "unverified" | "mismatch"
+    signature_verified: Optional[bool] = None
+    identity_status: Optional[str] = None
     violations: list[ScopeViolation] = Field(default_factory=list)
     executed_at: datetime = Field(default_factory=_utcnow)
     latency_ms: Optional[int] = None
