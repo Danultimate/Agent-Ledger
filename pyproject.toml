@@ -1,0 +1,54 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentledger-llm"
+version = "0.1.0"
+description = "Action-time proof and delegation verification for MCP agents"
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "Daniel Blanco", email = "hello@danblanco.dev" }]
+keywords = [
+    "mcp", "model-context-protocol", "agent", "ai-safety",
+    "audit", "delegation", "proof", "attribution", "agentid",
+    "wimse", "action-time-authorization",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Security",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "License :: OSI Approved :: Apache Software License",
+]
+dependencies = [
+    "pydantic>=2.0.0",
+    "rich>=13.0.0",
+    "python-ulid>=2.0.0",
+    "click>=8.0.0",
+]
+
+[project.optional-dependencies]
+traceforge = ["agentrace-llm>=0.1.0"]
+all = ["agentrace-llm>=0.1.0"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.23", "black", "ruff", "mypy"]
+
+[project.scripts]
+agentledger = "agentledger.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/Danultimate/agentledger"
+Repository = "https://github.com/Danultimate/agentledger"
+Documentation = "https://github.com/Danultimate/agentledger#readme"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

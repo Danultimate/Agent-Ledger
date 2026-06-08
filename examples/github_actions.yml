@@ -1,0 +1,37 @@
+name: Agent Delegation Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  agentledger:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install AgentLedger
+        run: pip install agentledger-llm
+
+      - name: Run agent with proof recording
+        run: python agent_example.py
+
+      - name: Verify chain integrity
+        run: agentledger chain --log ./logs/agent-proofs.jsonl
+
+      - name: Show proof report
+        run: agentledger report --log ./logs/agent-proofs.jsonl
+
+      - name: Upload proof log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-proof-log
+          path: ./logs/agent-proofs.jsonl

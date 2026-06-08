@@ -1,0 +1,48 @@
+# --- Design / spec documents (internal, not published) ---
+agentledger-spec.md
+*-spec.md
+/design/
+*.design.md
+
+# --- Secrets / local env ---
+.env
+.env.*
+*.pem
+*.key
+*.p12
+secrets.*
+.secrets/
+credentials.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+*.egg
+
+# --- Virtualenvs ---
+.venv/
+venv/
+env/
+
+# --- Tooling caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Runtime output ---
+logs/
+*.jsonl
+agentledger.yaml
+agent_example.py
+agentledger-report.html
+
+# --- OS / editor ---
+.DS_Store
+.idea/
+.vscode/
