@@ -164,9 +164,11 @@ These are out of scope at every version — listed so they are not mistaken for
 | Action recording + tamper-evident log | v1 | ✅ Shipped |
 | `on_violation` enforcement opt-in | v1 | ✅ Shipped |
 | Frozen, version-tagged receipt/chain serialization | v1 | ✅ Shipped (v2 prerequisite) |
-| Signed receipts (`Receipt.signature`) | v2 | ⬜ Planned |
-| SPIFFE/SPIRE SVID verification | v2 | ⬜ Planned |
-| Enforced WIMSE WPT validation | v2 | ⬜ Planned |
-| Scope-level (`permitted_scopes`) checks | v2 | ⬜ Planned |
+| Signed receipts (Ed25519, `Receipt.sign`) | v2 | ✅ Implemented |
+| Trusted-key verification (`KeyProvider`) | v2 | ✅ Implemented |
+| `require_signed` policy + scope checks | v2 | ✅ Implemented |
+| Pluggable agent identity (`IdentityProvider`) | v2 | ✅ Implemented |
+| SPIFFE-ID matching (`SpiffeIdentityProvider`) | v2 | 🟡 Partial (ID match; full SVID chain validation deferred) |
+| `audience`/`nonce` context binding (T5) | v2.x | ⬜ Planned |
 | Multi-hop delegation chains | v3 | ⬜ Planned |
 | Mid-chain revocation | v3 | ⬜ Planned |

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "agentledger-llm"
-version = "0.1.0"
+version = "0.2.0"
 description = "Action-time proof and delegation verification for MCP agents"
 readme = "README.md"
 license = { text = "Apache-2.0" }
@@ -35,8 +35,17 @@ dependencies = [
 
 [project.optional-dependencies]
 traceforge = ["agentrace-llm>=0.1.0"]
-all = ["agentrace-llm>=0.1.0"]
-dev = ["pytest>=7.0", "pytest-asyncio>=0.23", "black", "ruff", "mypy"]
+crypto = ["cryptography>=42.0.0"]
+spiffe = ["cryptography>=42.0.0", "pyspiffe>=0.1.0"]
+all = ["agentrace-llm>=0.1.0", "cryptography>=42.0.0", "pyspiffe>=0.1.0"]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.23",
+    "black",
+    "ruff",
+    "mypy",
+    "cryptography>=42.0.0",
+]
 
 [project.scripts]
 agentledger = "agentledger.cli:cli"

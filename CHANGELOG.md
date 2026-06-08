@@ -7,9 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Planned for v2 (cryptographic delegation proof) — see [docs/roadmap.md](docs/roadmap.md):
-signed receipts, SPIFFE/SPIRE SVID verification, enforced WIMSE WPT validation,
-and scope-level checks.
+### Added — v2 cryptographic delegation proof
+- **Signed receipts** (Ed25519): `Receipt.sign(private_key)` signs the frozen
+  `agentledger.receipt.v1` canonical bytes; `agentledger.signing` provides
+  `generate_keypair`, `sign`, `verify`, and key (de)serialization. Requires the
+  `crypto` extra.
+- **Trusted-key verification**: `KeyProvider` / `InMemoryKeyProvider`. Signatures
+  are checked only against keys the verifier already trusts — never one embedded
+  in the receipt.
+- **`require_signed` policy** on `@ledger.record`. Default stays graceful:
+  unsigned receipts are recorded with `signature_verified=None` and never
+  reported as verified; `require_signed=True` makes unsigned/unverifiable a
+  violation.
+- **Scope checks**: `scopes=[...]` on `@ledger.record` verifies each against the
+  receipt's `permitted_scopes` (`scope_not_permitted`).
+- **Pluggable agent identity** (`IdentityProvider`): `StaticIdentityProvider`
+  and `SpiffeIdentityProvider` (SPIFFE-ID match; `spiffe` extra). No provider
+  configured ⇒ `identity_status="unverified"` (honest marker, not failure).
+- New proof fields `signature_verified` and `identity_status`, surfaced in
+  verdicts; new violation types `signature_missing`, `signature_invalid`,
+  `signature_unverifiable`, `identity_mismatch`, `scope_not_permitted`.
+- Docs: `docs/threat-model.md`, `docs/v2-design.md`.
+
+### Security
+- v2 raises a `within_delegation=True` verdict on a signed receipt to mean *the
+  named agent acted under a grant the principal cryptographically signed*. The
+  `within_delegation` outcome stays hash-chained; the new crypto-status fields
+  are recorded but (this release) not hash-chained — `within_delegation` is the
+  load-bearing, tamper-evident outcome. Residual risks (compromised key,
+  malicious principal, in-process verifier, un-anchored log) are documented in
+  the threat model and remain out of scope.
 
 ## [0.1.0] - 2026-06-08
 

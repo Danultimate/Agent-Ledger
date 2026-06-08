@@ -49,7 +49,8 @@ class Receipt(BaseModel):
     expires_at: Optional[datetime] = None
     constraints: dict = Field(default_factory=dict)  # advisory only
     wimse_compatible: bool = True  # structural alignment marker, not verified
-    signature: Optional[str] = None  # placeholder for v2 cryptographic binding
+    signature: Optional[str] = None       # base64 Ed25519 signature (v2)
+    signature_alg: Optional[str] = None   # e.g. "ed25519"; pinned set verified
 
     @property
     def is_expired(self) -> bool:
@@ -101,6 +102,22 @@ class Receipt(BaseModel):
     def canonical_bytes(self) -> bytes:
         """Byte-stable serialization of :meth:`signing_payload` for signing/verify."""
         return canonical_bytes(self.signing_payload())
+
+    def sign(self, private_key) -> "Receipt":
+        """Sign this receipt with the principal's Ed25519 private key (v2).
+
+        Sets ``signature`` and ``signature_alg`` in place and returns self.
+        Requires the ``crypto`` extra (``pip install 'agentledger-llm[crypto]'``).
+        """
+        from agentledger.signing import SIGNATURE_ALG, sign
+
+        self.signature = sign(self.canonical_bytes(), private_key)
+        self.signature_alg = SIGNATURE_ALG
+        return self
+
+    @property
+    def is_signed(self) -> bool:
+        return bool(self.signature)
 
     def permits_tool(self, tool_name: str) -> bool:
         return tool_name in self.permitted_tools
